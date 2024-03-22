@@ -132,7 +132,7 @@ class RouteVarQuery:
             for var in self.route_vars:
                 if str(var.datalist[properties]).lower() == str(search_data).lower():
                     data.append(
-                        ['Id: '+var.datalist['RouteId'], 'Name: '+var.datalist['RouteVarName'],
+                        ['Id: ' + var.datalist['RouteId'], 'Name: ' + var.datalist['RouteVarName'],
                          'Short Name' + var.datalist['RouteVarShortName']])
             return data
         else:
@@ -170,7 +170,13 @@ class Stop:
         self._stop_id_list = data_array['Stops']
         self._route_id = data_array['RouteId']
         self._route_var_id = data_array['RouteVarId']
-        self.datalist = data_array
+        self.data_list = data_array
+
+    def get_coordinates(self):
+        coordinates = []
+        for var in self._stop_id_list:
+            coordinates.append([var['Lng'], var['Lat']])
+        return coordinates
 
     @property
     def get_stop_id_list(self):
@@ -202,28 +208,29 @@ class StopQuery:
                       "Status", "Lng", "Lat", "Search", "Routes"]
 
     def __init__(self, json_file):
-        self.stops = []
+        self.stop_routes = []
         try:
             with open(json_file, 'r', encoding='utf8') as f:
                 for line in f:
                     v = json.loads(line)
-                    self.stops.append(Stop(v))
+                    self.stop_routes.append(Stop(v))
         except Exception as e:
             print("An error occurred while opening the file:", e)
 
     def search_by_properties(self, properties, search_data):
         datas = []
         if properties == "RouteId" or properties == "RouteVarId":
-            for var in self.stops:
-                if var.datalist[properties] == str(search_data):
-                    datas.append([var.datalist['RouteId'], var.datalist['RouteVarId']])
+            for var in self.stop_routes:
+                if var.data_list[properties] == str(search_data):
+                    datas.append([var.data_list['RouteId'], var.data_list['RouteVarId']])
             return datas
         elif properties in self.stops_property:
-            for var in self.stops:
+            for var in self.stop_routes:
                 for stop_id in var.get_stop_id_list:
                     if str(stop_id[properties]) == str(search_data):
-                        datas.append(['Stop Id: '+str(stop_id['StopId']), "Code: "+stop_id['Code'],
-                                      'Route Id: '+str(var.get_route_id), 'Route Var Id: '+str(var.get_route_var_id)])
+                        datas.append(['Stop Id: ' + str(stop_id['StopId']), "Code: " + stop_id['Code'],
+                                      'Route Id: ' + str(var.get_route_id),
+                                      'Route Var Id: ' + str(var.get_route_var_id)])
             return datas
         else:
             print("There is no property found")
@@ -231,8 +238,8 @@ class StopQuery:
     def output_as_json(self, file_name):
         try:
             with open(file_name, 'w', encoding='utf8') as jsonfile:
-                for route_var in self.stops:
-                    json.dump(route_var.datalist, jsonfile, ensure_ascii=False)
+                for route_var in self.stop_routes:
+                    json.dump(route_var.data_list, jsonfile, ensure_ascii=False)
                     jsonfile.write('\n')
         except Exception as e:
             print("An error occurred while opening the file:", e)
@@ -241,12 +248,93 @@ class StopQuery:
         try:
             with open(file_name, 'w', newline='', encoding='utf8') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(self.stops[0].datalist)
-                for var in self.stops:
+                writer.writerow(self.stop_routes[0].data_list)
+                for var in self.stop_routes:
                     ss = []
-                    for com in var.datalist:
-                        ss.append(var.datalist[com])
+                    for com in var.data_list:
+                        ss.append(var.data_list[com])
                     writer.writerow(ss)
         except Exception as e:
             print("An error occurred while opening the file:", e)
 
+    def geojson_write(self, filename):
+        geo_data = {
+            "type": "FeatureCollection",
+            "features": []
+        }
+        for var in self.stop_routes:
+            coordinates = var.get_coordinates()
+            geo_data["features"].append({
+                "type": "Feature",
+                "properties": {
+                    "name": var.get_route_id
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": coordinates
+                }
+            })
+
+        # Write the GeoJSON data to the specified file
+        with open(filename, 'w') as file:
+            json.dump(geo_data, file)
+
+
+class Path:
+    def __init__(self, data):
+        self._lat = data['lat']
+        self._lng = data['lng']
+        self._route_id = data['RouteId']
+        self._route_var_id = data['RouteVarId']
+
+    def get_route_id(self):
+        return self._route_id
+
+    def get_route_var_id(self):
+        return self._route_var_id
+    def get_lng(self):
+        return self._lng
+
+    def get_lat(self):
+        return self._lat
+
+    def get_coordinates(self):
+        coordinates = []
+        for i in range(len(self._lat)):
+            coordinates.append([self._lng[i], self._lat[i]])
+        return coordinates
+
+
+class PathQuery:
+
+    def __init__(self, json_file):
+        self.paths = []
+        try:
+            with open(json_file, 'r', encoding='utf8') as f:
+                for line in f:
+                    v = json.loads(line)
+                    self.paths.append(Path(v))
+        except Exception as e:
+            print("An error occurred while opening the file:", e)
+
+    def geojson_paths_write(self, filename):
+        geo_data = {
+            "type": "FeatureCollection",
+            "features": []
+        }
+        for var in self.paths:
+            coordinates = var.get_coordinates()
+            geo_data["features"].append({
+                "type": "Feature",
+                "properties": {
+                    "name": var.get_route_id()
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": coordinates
+                }
+            })
+
+        # Write the GeoJSON data to the specified file
+        with open(filename, 'w') as file:
+            json.dump(geo_data, file)
